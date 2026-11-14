@@ -167,3 +167,54 @@ def test_offline_note_and_no_env_vars_in_main_view(offline, case):
     text = _all_text(at)
     assert "Running offline: explanation built from the checks' own messages." in text
     assert "ANTHROPIC" not in text and ".env" not in text
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("epv_vs_riley", "Too few patients for 10 predictors: Riley needs 1,205, this dataset has 1,000."),
+    ("messy", "Too much missing data in required fields: stage 30% (limit 20%)."),
+    ("broken", "Required column(s) missing from the file: vital_status."),
+    ("leakage", "date_of_death reveals the outcome and would leak it into the model."),
+    ("pdl1_unmappable", "The question asks about PD-L1 status, which no column in the dataset records."),
+])
+def test_why_box_uses_headlines_table_keeps_messages(offline, name, expected):
+    at = run_case(name)
+    why = next(m.value for m in at.markdown if "cf-why" in m.value)
+    assert expected in why
+    driving = at.session_state.result["driving_checks"]
+    tables = "\n".join(m.value for m in at.markdown if "<table" in m.value)
+    for c in driving:
+        assert c["message"] not in why          # technical message not in Why box
+        import html as _h
+        assert _h.escape(c["message"]) in tables  # but still in the checks table
+
+
+def test_every_failing_check_has_a_headline(offline):
+    import app
+    from checks import run_checks
+    from data.generate import build_all
+    files = build_all()
+    for case in DEMO_CASES:
+        for c in run_checks(files[case["file"].removesuffix(".csv")], case["requirements"]):
+            if c["status"] in {"fail", "unknown"}:
+                h = app.headline(c)
+                assert h and h != c["message"], c["name"]
+
+
+@pytest.mark.parametrize("name", ["messy", "broken"])
+def test_offline_explanation_shows_summary_only(offline, name):
+    at = run_case(name)
+    res = at.session_state.result
+    md = [m.value for m in at.markdown]
+    for d in res["explanation"]["driving_checks"]:
+        assert f"- **{d['name']}**: {d['explanation']}" not in md
+    assert any(res["explanation"]["summary"] in m for m in md)
+
+
+@pytest.mark.parametrize("case", DEMO_CASES, ids=lambda c: c["name"])
+def test_r2cs_written_as_superscript(offline, case):
+    at = run_case(case["name"])
+    text = _all_text(at)
+    assert "R2cs" not in text and "R2 " not in text
+    ss = next(c for c in at.session_state.result["checks"] if c["name"] == "sample_size")
+    if ss["status"] in {"pass", "fail"}:  # computed -> the R²cs note is shown
+        assert "R²cs" in text

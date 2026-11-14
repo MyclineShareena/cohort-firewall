@@ -40,13 +40,13 @@ def riley_binary(n_params: int, phi: float, r2cs: float | None = None) -> dict:
     mx = max_r2cs(phi)
     if r2cs is None:
         r2cs, source = DEFAULT_R2_FRACTION * mx, "default"
-        note = (f"Anticipated R2cs not given; using 15% of max R2cs "
+        note = (f"Anticipated R²cs not given; using 15% of max R²cs "
                 f"({mx:.3f}) = {r2cs:.4f}.")
     else:
         source = "user"
-        note = f"Anticipated R2cs = {r2cs:.4f} (user input); max R2cs = {mx:.3f}."
+        note = f"Anticipated R²cs = {r2cs:.4f} (user input); max R²cs = {mx:.3f}."
     if not 0 < r2cs < mx:
-        raise ValueError(f"anticipated R2cs must be in (0, {mx:.3f}), got {r2cs}")
+        raise ValueError(f"anticipated R²cs must be in (0, {mx:.3f}), got {r2cs}")
 
     s_vh = r2cs / (r2cs + DELTA * mx)
     n_i = math.ceil(_n_for_shrinkage(n_params, r2cs, SHRINKAGE))

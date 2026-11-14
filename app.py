@@ -64,6 +64,54 @@ def status_label(check: dict) -> str:
     return STATUS_LABEL[check["status"]]
 
 
+def _list(items, limit=4) -> str:
+    items = list(items)
+    return ", ".join(map(str, items[:limit])) + (", ..." if len(items) > limit else "")
+
+
+def headline(check: dict) -> str:
+    """Short plain-English summary for the Why box. Display only: the verdict logic
+    and the full technical message (shown in the checks table) are unchanged."""
+    name, status, v = check["name"], check["status"], check.get("value")
+    if status in {"pass", "not_applicable"}:
+        return check["message"]
+    if name == "sample_size" and status == "fail":
+        return (f"Too few patients for {v['n_params']} predictors: Riley needs "
+                f"{v['n_required']:,}, this dataset has {v['n_available']:,}.")
+    if name == "required_field_missingness" and status == "fail":
+        over = {c: f for c, f in v["by_column"].items() if f > 0.20}
+        cols = _list(f"{c} {f:.0%}" for c, f in sorted(over.items(), key=lambda x: -x[1]))
+        limit = "over 40%" if check["severity"] == "hard" else "limit 20%"
+        return f"Too much missing data in required fields: {cols} ({limit})."
+    if name == "required_fields_present" and status == "fail":
+        if v and v["missing"]:
+            return f"Required column(s) missing from the file: {_list(v['missing'])}."
+        return "Some required columns contain values of the wrong type."
+    if name == "outcome_derivable":
+        if status == "unknown":
+            return "The outcome to assess could not be determined from the question."
+        if v is None:
+            return "The outcome can't be worked out: the columns needed to derive it are missing."
+        return "The outcome has no variation: every patient has the same result."
+    if name == "question_terms_mappable":
+        return f"The question asks about {_list(v)}, which no column in the dataset records."
+    if name == "question_parsed":
+        return "The question could not be turned into checkable requirements."
+    if name == "early_censoring" and status == "fail":
+        return (f"{v:.0%} of patients were followed too briefly to know their outcome "
+                "(limit 15%).")
+    if name == "subgroup_counts" and status == "fail":
+        small = [f"{k} ({n})" for k, n in v.items() if n < check["threshold"]]
+        return f"Some subgroups have fewer than {check['threshold']} patients: {_list(small)}."
+    if name == "label_leakage":
+        return f"{_list(v)} reveals the outcome and would leak it into the model."
+    if name == "identifier_columns":
+        return f"Columns that look like real patient identifiers: {_list(v, 3)}."
+    if status == "unknown":
+        return f"Could not be assessed: {check['message']}"
+    return check["message"]
+
+
 def scorecard(checks: list[dict]) -> str:
     """'N checks: X pass, Y soft fail, Z hard fail, W unknown, V not applicable'."""
     def n(pred):
@@ -130,8 +178,8 @@ def why_box_html(result: dict) -> str:
     driving = result["driving_checks"]
     if driving:
         items = "".join(
-            f'<li><b>{html.escape(status_label(c))}</b> <code>{html.escape(c["name"])}</code>: '
-            f'{html.escape(c["message"])}</li>' for c in driving)
+            f'<li><b>{html.escape(status_label(c))}</b> {html.escape(headline(c))} '
+            f'<code style="opacity:0.7">{html.escape(c["name"])}</code></li>' for c in driving)
         body = f'<ul style="margin:4px 0 0 0;padding-left:20px">{items}</ul>'
     else:
         body = "<div>No check failed or was inconclusive.</div>"
@@ -144,7 +192,15 @@ def render_explanation(result: dict) -> None:
     ex = result["explanation"]
     st.subheader("Explanation")
     if ex["source"] == "fallback":
+        # Offline: the Why box and checks table already show the findings.
         st.caption(OFFLINE_NOTE)
+        st.write(ex["summary"])
+    else:
+        _render_claude_explanation(ex)
+    _render_next_actions(ex)
+
+
+def _render_claude_explanation(ex: dict) -> None:
     st.write(ex["summary"])
     for d in ex["driving_checks"]:
         st.markdown(f"- **{d['name']}**: {d['explanation']}")
@@ -153,6 +209,9 @@ def render_explanation(result: dict) -> None:
         for n in ex["not_applicable"]:
             st.markdown(f'<div style="color:#6e7781">— {html.escape(n["name"])}: '
                         f'{html.escape(n["reason"])}</div>', unsafe_allow_html=True)
+
+
+def _render_next_actions(ex: dict) -> None:
     st.subheader("Next actions")
     if ex["next_actions"]:
         for a in ex["next_actions"]:
