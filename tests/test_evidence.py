@@ -134,3 +134,69 @@ def test_no_clinical_validity_or_production_claims(case):
     res, ds = run(case["name"])
     md = E.record_markdown(E.build_record(res, None, ds, now=NOW)).lower()
     assert not any(b in md for b in BANNED)
+
+
+@pytest.mark.parametrize("verdict,decision,override", [
+    ("Blocked", "Approve for this question", True),
+    ("Blocked", "Approve with conditions", True),
+    ("Blocked", "Reject", False),
+    ("Insufficient Evidence", "Approve with conditions", True),
+    ("Insufficient Evidence", "Reject", False),
+    ("Conditional", "Approve for this question", True),
+    ("Conditional", "Approve with conditions", False),
+    ("Conditional", "Reject", False),
+    ("Ready", "Approve for this question", False),
+    ("Ready", "Reject", False),
+])
+def test_is_override(verdict, decision, override):
+    assert E.is_override(verdict, decision) is override
+    errs = E.validate_review("Dr A", True, decision, "", verdict)
+    assert bool(errs) is override  # empty notes rejected exactly when overriding
+    assert not E.validate_review("Dr A", True, decision, "Reason given.", verdict)
+
+
+def test_override_in_record_and_markdown():
+    res, ds = run("leakage")
+    with pytest.raises(ValueError, match="justification"):
+        E.make_review("Dr A", True, "Approve for this question", "  ", res["verdict"])
+    rev = E.make_review("Dr A", True, "Approve for this question", "Pilot only.",
+                        res["verdict"], now=NOW)
+    rec = E.build_record(res, rev, ds, now=NOW)
+    assert rec["human_review"]["override"] is True
+    assert rec["human_review"]["justification"] == "Pilot only."
+    assert rec["verdict"] == "Blocked"
+    md = E.record_markdown(rec)
+    assert "Reviewer decision differs from the tool's verdict (Blocked). Justification recorded." in md
+    assert "Justification: Pilot only." in md
+    plain = E.make_review("Dr A", True, "Reject", "", res["verdict"], now=NOW)
+    assert plain["override"] is False and plain["justification"] is None
+
+
+@pytest.mark.parametrize("case", DEMO_CASES, ids=lambda c: c["name"])
+def test_events_needed_same_in_card_and_evidence_and_rounded_up(case):
+    import math
+    import re
+    import app
+    res, _ = run(case["name"])
+    ss = check(res, "sample_size")
+    v = ss["value"]
+    if not v or "n_required" not in v:
+        pytest.skip("sample size not computed")
+    assert v["events_required"] == math.ceil(round(v["n_required"] * v["phi"], 9))
+    card = app.sample_size_cards_html(ss)[0]
+    card_events = int(re.search(r"vs ([\d,]+) needed", card).group(1).replace(",", ""))
+    assert card_events == v["events_required"]
+    need = E.evidence_needed({**ss, "status": "fail"}, res["requirements"])
+    need_events = int(re.search(r"\(([\d,]+) events\)", need).group(1).replace(",", ""))
+    assert need_events == card_events
+
+
+def test_epv_vs_riley_needs_121_events():
+    res, _ = run("epv_vs_riley")
+    assert check(res, "sample_size")["value"]["events_required"] == 121  # ceil(1205 * 0.1)
+
+
+def test_ceil_count_ignores_float_noise():
+    from sample_size import ceil_count
+    assert 0.07 * 100 > 7 and ceil_count(0.07 * 100) == 7
+    assert ceil_count(120.5) == 121 and ceil_count(114.18) == 115

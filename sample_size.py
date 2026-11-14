@@ -29,6 +29,11 @@ def max_r2cs(phi: float) -> float:
     return 1 - math.exp(2 * ln_l0_per_n)
 
 
+def ceil_count(x: float) -> int:
+    """Round a required count up, ignoring float noise (0.1 * 1200 -> 120, not 121)."""
+    return math.ceil(round(x, 9))
+
+
 def _n_for_shrinkage(n_params: int, r2cs: float, s: float) -> float:
     return n_params / ((s - 1) * math.log(1 - r2cs / s))
 
@@ -57,7 +62,7 @@ def riley_binary(n_params: int, phi: float, r2cs: float | None = None) -> dict:
         "n_params": n_params, "phi": phi, "r2cs": r2cs, "r2cs_source": source,
         "r2cs_note": note, "max_r2cs": mx, "s_vh": s_vh,
         "criterion_i": n_i, "criterion_ii": n_ii, "criterion_iii": n_iii,
-        "n_required": n, "events_required": math.ceil(n * phi),
+        "n_required": n, "events_required": ceil_count(n * phi),
         "binding_criterion": {n_i: "i", n_ii: "ii", n_iii: "iii"}[n],
     }
 

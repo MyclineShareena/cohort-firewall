@@ -343,18 +343,22 @@ def render_review(result: dict) -> None:
         st.success(f"Review recorded: {review['decision']}, by {review['reviewer']} at "
                    f"{review['submitted_at']}. The tool's verdict ({result['verdict']}) is "
                    "unchanged; the review is recorded alongside it.")
+        if review["override"]:
+            st.warning(E.override_warning(review["tool_verdict_at_review"]))
         if review["notes"]:
-            st.caption(f"Notes: {review['notes']}")
+            st.caption(f"{'Justification' if review['override'] else 'Notes'}: "
+                       f"{review['notes']}")
         return
     st.warning(E.REVIEW_PENDING)
     with st.form("review_form"):
         reviewer = st.text_input("Reviewer name", key="review_name")
         reviewed = st.checkbox("I have reviewed the evidence", key="review_checked")
         decision = st.radio("Decision", E.DECISIONS, index=None, key="review_decision")
-        notes = st.text_area("Notes", key="review_notes", height=80)
+        notes = st.text_area("Notes (a justification is required if the decision is less "
+                             "cautious than the verdict)", key="review_notes", height=80)
         submitted = st.form_submit_button("Submit review")
     if submitted:
-        errors = E.validate_review(reviewer, reviewed, decision)
+        errors = E.validate_review(reviewer, reviewed, decision, notes, result["verdict"])
         if errors:
             for e in errors:
                 st.error(e)

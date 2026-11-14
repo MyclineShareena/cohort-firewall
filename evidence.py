@@ -134,7 +134,25 @@ def limitations(result: dict) -> list[str]:
     return items
 
 
-def validate_review(reviewer: str, reviewed: bool, decision: str | None) -> list[str]:
+# Higher = more cautious. A decision is an override when it is less cautious than
+# the verdict: approving Blocked/Insufficient Evidence, or approving a Conditional
+# dataset without conditions.
+_VERDICT_CAUTION = {"Ready": 0, "Conditional": 1, "Insufficient Evidence": 2, "Blocked": 2}
+_DECISION_CAUTION = {"Approve for this question": 0, "Approve with conditions": 1, "Reject": 2}
+
+
+def is_override(verdict: str | None, decision: str | None) -> bool:
+    if verdict not in _VERDICT_CAUTION or decision not in _DECISION_CAUTION:
+        return False
+    return _DECISION_CAUTION[decision] < _VERDICT_CAUTION[verdict]
+
+
+def override_warning(verdict: str) -> str:
+    return f"Reviewer decision differs from the tool's verdict ({verdict}). Justification recorded."
+
+
+def validate_review(reviewer: str, reviewed: bool, decision: str | None,
+                    notes: str = "", verdict: str | None = None) -> list[str]:
     errors = []
     if not (reviewer or "").strip():
         errors.append("Enter the reviewer's name.")
@@ -142,19 +160,25 @@ def validate_review(reviewer: str, reviewed: bool, decision: str | None) -> list
         errors.append("Tick \"I have reviewed the evidence\".")
     if decision not in DECISIONS:
         errors.append("Choose a decision.")
+    elif is_override(verdict, decision) and not (notes or "").strip():
+        errors.append(f"This decision is less cautious than the tool's verdict ({verdict}). "
+                      "Write a justification in the notes.")
     return errors
 
 
 def make_review(reviewer: str, reviewed: bool, decision: str, notes: str,
                 verdict: str, now: datetime | None = None) -> dict:
-    errors = validate_review(reviewer, reviewed, decision)
+    errors = validate_review(reviewer, reviewed, decision, notes, verdict)
     if errors:
         raise ValueError(" ".join(errors))
     now = now or datetime.now(timezone.utc)
+    notes = (notes or "").strip()
+    override = is_override(verdict, decision)
     return {"status": "submitted", "reviewer": reviewer.strip(), "reviewed_evidence": True,
-            "decision": decision, "notes": (notes or "").strip(),
+            "decision": decision, "notes": notes,
             "submitted_at": now.isoformat(timespec="seconds"),
-            "tool_verdict_at_review": verdict}
+            "tool_verdict_at_review": verdict,
+            "override": override, "justification": notes if override else None}
 
 
 def build_record(result: dict, review: dict | None, dataset: dict | None = None,
@@ -214,7 +238,11 @@ def record_markdown(record: dict) -> str:
                   f"- Decision: {rev['decision']}",
                   f"- Notes: {rev['notes'] or '(none)'}",
                   f"- Submitted: {rev['submitted_at']}",
-                  f"- Tool verdict at review: {rev['tool_verdict_at_review']} (unchanged)"]
+                  f"- Tool verdict at review: {rev['tool_verdict_at_review']} (unchanged)",
+                  f"- Override: {'yes' if rev['override'] else 'no'}"]
+        if rev["override"]:
+            lines += ["", f"**{override_warning(rev['tool_verdict_at_review'])}**", "",
+                      f"Justification: {rev['justification']}"]
     else:
         lines.append(f"Pending. {REVIEW_PENDING}.")
     lines += ["", "## Checks", "",

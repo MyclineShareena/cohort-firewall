@@ -250,6 +250,7 @@ def test_review_requires_checkbox_and_keeps_verdict(offline):
     assert "review" not in at.session_state and PENDING in [w.value for w in at.warning]
 
     at.checkbox(key="review_checked").check()
+    at.text_area(key="review_notes").input("Column will be dropped before modeling.")
     _review_submit(at).click().run()
     assert not at.exception
     assert PENDING not in [w.value for w in at.warning]
@@ -294,3 +295,41 @@ def test_evidence_needed_in_why_box_and_table(offline):
     assert "Evidence needed to reconsider:" in tables
     clean_tables = "\n".join(m.value for m in run_case("clean").markdown if "<table" in m.value)
     assert "Evidence needed to reconsider" not in clean_tables  # passing checks: none
+
+
+def _fill_review(at, decision, notes=""):
+    at.text_input(key="review_name").input("Dr A")
+    at.checkbox(key="review_checked").check()
+    at.radio(key="review_decision").set_value(decision)
+    at.text_area(key="review_notes").input(notes)
+    _review_submit(at).click().run()
+    assert not at.exception
+
+
+@pytest.mark.parametrize("name,verdict", [("leakage", "Blocked"),
+                                          ("pdl1_unmappable", "Insufficient Evidence")])
+def test_override_needs_justification_then_warns(offline, name, verdict):
+    at = run_case(name)
+    _fill_review(at, "Approve with conditions")
+    assert any("Write a justification in the notes" in e.value for e in at.error)
+    assert "review" not in at.session_state
+    at.text_area(key="review_notes").input("Accepted risk for a pilot; see ticket 12.")
+    _review_submit(at).click().run()
+    warn = f"Reviewer decision differs from the tool's verdict ({verdict}). Justification recorded."
+    assert warn in [w.value for w in at.warning]
+    rev = at.session_state.review
+    assert rev["override"] is True
+    assert rev["justification"] == "Accepted risk for a pilot; see ticket 12."
+    assert at.session_state.result["verdict"] == verdict  # verdict unchanged
+    import app
+    rec = app.E.build_record(
+        at.session_state.result, rev, at.session_state.dataset_info)
+    assert rec["human_review"]["override"] is True
+    assert rec["human_review"]["justification"] == "Accepted risk for a pilot; see ticket 12."
+
+
+def test_cautious_decision_is_not_override(offline):
+    at = run_case("messy")  # Conditional
+    _fill_review(at, "Approve with conditions")  # no notes needed
+    assert at.session_state.review["override"] is False
+    assert not any("differs from the tool's verdict" in w.value for w in at.warning)
