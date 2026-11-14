@@ -96,12 +96,6 @@ def validate_explanation(out: dict, checks: list[dict], verdict: dict) -> list[s
     return errs
 
 
-def _fallback_action(check: dict) -> str:
-    if check["name"] == "question_parsed" and (check["value"] or {}).get("config_error"):
-        return "Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL (environment or .env), then re-run."
-    return FALLBACK_ACTIONS.get(check["name"], "Review this finding.")
-
-
 def fallback_explanation(checks: list[dict], verdict: dict, reason: str) -> dict:
     """Deterministic explanation from the checks' own messages."""
     driving = {c["name"] for c in verdict["driving_checks"]}
@@ -113,7 +107,7 @@ def fallback_explanation(checks: list[dict], verdict: dict, reason: str) -> dict
                            for c in checks if c["name"] in driving],
         "not_applicable": [{"name": c["name"], "reason": c["message"]}
                            for c in checks if c["status"] == "not_applicable"],
-        "next_actions": [{"check_name": c["name"], "action": _fallback_action(c)}
+        "next_actions": [{"check_name": c["name"], "action": FALLBACK_ACTIONS.get(c["name"], "Review this finding.")}
                          for c in checks if c["status"] in {"fail", "unknown"}],
         "source": "fallback",
         "error": reason,
@@ -132,7 +126,8 @@ def explain(question: str, requirements: dict | None, checks: list[dict], verdic
     feedback, last_error = None, None
     for _ in (1, 2):
         user = prompts.explainer_user_message(question, requirements, checks, verdict, feedback)
-        out, err = call_structured(client, model, prompts.EXPLAINER_SYSTEM, user, ExplanationOut)
+        out, err, _ = call_structured(client, model, prompts.EXPLAINER_SYSTEM, user,
+                                      ExplanationOut)
         if out is None:
             last_error, feedback = err, None
             continue

@@ -75,10 +75,19 @@ def test_r2_passed_through(files):
     assert ss["value"]["r2cs_source"] == "user"
 
 
-def test_missing_config_gives_setup_action(files, monkeypatch):
+
+def test_missing_setup_returns_no_verdict(files, monkeypatch):
     import parser as P
+    from pipeline import SETUP_MESSAGE
     monkeypatch.setattr(P, "load_env", lambda: None)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
-    res = assess(files["clean"], DEMO_CASES[0]["question"], DESCRIPTION)
-    assert res["verdict"] == "Insufficient Evidence"
-    assert "ANTHROPIC_MODEL" in res["explanation"]["next_actions"][0]["action"]
+    res = assess(files["clean"], "Does albumin predict 12-month death?", DESCRIPTION)
+    assert res["status"] == "setup_required" and res["message"] == SETUP_MESSAGE
+    assert res["verdict"] is None and res["checks"] is None
+
+
+def test_api_errors_return_no_verdict(files):
+    err = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.example"))
+    res = assess(files["clean"], "Does albumin predict 12-month death?", DESCRIPTION,
+                 client=FakeClient([err, err]), model="test-model")
+    assert res["status"] == "api_unavailable" and res["verdict"] is None

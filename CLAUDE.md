@@ -89,6 +89,9 @@ must say which checks were not applicable and why.
 Any hard fail -> Blocked; else any unknown -> Insufficient Evidence;
 else any soft fail -> Conditional; else Ready. Return verdict plus the
 checks that drove it.
+A verdict only ever describes the data. Missing API setup returns status
+"setup_required" ("Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL"), and an
+unreachable API returns "api_unavailable"; neither has a verdict.
 
 ## Demo files (Milestone 1 done, commit e9ab7ff)
 - clean.csv: 2000 rows, 560 events, 60 excluded -> Ready

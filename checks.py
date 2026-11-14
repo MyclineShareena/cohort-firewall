@@ -198,10 +198,10 @@ def check_terms_mappable(req: dict) -> dict:
                    "All terms in the question map to dataset columns.")
 
 
-def check_question_parsed(error: str, config_error: bool = False) -> dict:
-    """Consistency: the question could not be turned into valid requirements."""
-    return _result("question_parsed", "consistency", "hard", "unknown",
-                   {"config_error": config_error}, None,
+def check_question_parsed(error: str) -> dict:
+    """Consistency: Claude answered, but the question could not be turned into valid
+    requirements. (API/setup problems never reach the checks: see pipeline.py.)"""
+    return _result("question_parsed", "consistency", "hard", "unknown", None, None,
                    f"The question could not be evaluated: {error}")
 
 

@@ -97,7 +97,7 @@ def test_two_failures_return_error(profile):
     bad = good_output(predictor_columns=["pdl1_status"])
     res, _ = run([bad, bad], profile)
     assert not res["ok"] and res["attempts"] == 2 and res["requirements"] is None
-    assert "pdl1_status" in res["error"]
+    assert res["status"] == "parse_failed" and "pdl1_status" in res["error"]
 
 
 def test_refusal_counts_as_attempt(profile):
@@ -108,7 +108,13 @@ def test_refusal_counts_as_attempt(profile):
 def test_api_error_counts_as_attempt(profile):
     err = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.example"))
     res, _ = run([err, err], profile)
-    assert not res["ok"] and res["attempts"] == 2
+    assert not res["ok"] and res["attempts"] == 2 and res["status"] == "api_unavailable"
+
+
+def test_api_error_then_refusal_is_parse_failure(profile):
+    err = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.example"))
+    res, _ = run([err, REFUSAL], profile)
+    assert res["status"] == "parse_failed"
 
 
 # ---------- validators ----------
@@ -167,7 +173,7 @@ def test_missing_model_fails_cleanly(profile, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret-value")
     res = P.parse_question(CLEAN["question"], profile, DESCRIPTION)
-    assert not res["ok"] and res["attempts"] == 0
+    assert not res["ok"] and res["attempts"] == 0 and res["status"] == "setup_required"
     assert "ANTHROPIC_MODEL" in res["error"]
     assert "sk-test-secret-value" not in str(res)
 

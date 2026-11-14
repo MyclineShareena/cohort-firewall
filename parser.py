@@ -49,20 +49,26 @@ def get_client() -> anthropic.Anthropic:
 
 
 def call_structured(client, model: str, system: str, user: str, output_format):
-    """One structured-output call. Returns (parsed dict or None, error or None)."""
+    """One structured-output call.
+
+    Returns (parsed dict or None, error or None, api_failed). api_failed is True
+    when the API itself could not be used (network, auth, credits, server error).
+    """
     try:
         resp = client.messages.parse(
             model=model, max_tokens=MAX_TOKENS, system=system,
             messages=[{"role": "user", "content": user}], output_format=output_format)
-    except (anthropic.APIError, pydantic.ValidationError, ValueError) as e:
-        return None, f"API call failed: {type(e).__name__}"
+    except anthropic.APIError as e:
+        return None, f"API call failed: {type(e).__name__}", True
+    except (pydantic.ValidationError, ValueError) as e:
+        return None, f"invalid structured output: {type(e).__name__}", False
     if resp.stop_reason == "refusal":
-        return None, "the model declined the request"
+        return None, "the model declined the request", False
     if resp.stop_reason == "max_tokens":
-        return None, "the response was cut off (max_tokens)"
+        return None, "the response was cut off (max_tokens)", False
     if resp.parsed_output is None:
-        return None, "no structured output returned"
-    return resp.parsed_output.model_dump(), None
+        return None, "no structured output returned", False
+    return resp.parsed_output.model_dump(), None, False
 
 
 # ------------------------------------------------------------------ schema
@@ -213,25 +219,38 @@ def normalize(parsed: dict, profile: dict) -> tuple[dict, list[str]]:
 
 def parse_question(question: str, profile: dict, description: str | None = None,
                    client=None, model: str | None = None) -> dict:
-    """Returns {ok, requirements, error, attempts, notes}."""
+    """Returns {status, ok, requirements, error, attempts, notes}.
+
+    status: "ok" | "parse_failed" (Claude answered, but no valid requirements)
+            | "setup_required" (key/model not configured)
+            | "api_unavailable" (every attempt failed at the API level)
+    """
+    def fail(status, error, attempts):
+        return {"status": status, "ok": False, "requirements": None, "error": error,
+                "attempts": attempts, "notes": []}
+
     try:
         model = model or get_model()
         client = client or get_client()
     except ConfigError as e:
-        return {"ok": False, "requirements": None, "error": str(e), "attempts": 0, "notes": []}
+        return fail("setup_required", str(e), 0)
 
-    feedback, previous, last_error = None, None, None
+    feedback, previous, last_error, all_api_failed = None, None, None, True
     for attempt in (1, 2):
         user = prompts.parser_user_message(question, profile, description, feedback, previous)
-        parsed, err = call_structured(client, model, prompts.PARSER_SYSTEM, user, ParsedQuestion)
+        parsed, err, api_failed = call_structured(client, model, prompts.PARSER_SYSTEM, user,
+                                                  ParsedQuestion)
+        all_api_failed &= api_failed
         if parsed is None:
             last_error, feedback, previous = err, None, None
             continue
         errs = validate_parsed(parsed, profile, description)
         if not errs:
             req, notes = normalize(parsed, profile)
-            return {"ok": True, "requirements": req, "error": None, "attempts": attempt,
-                    "notes": notes}
+            return {"status": "ok", "ok": True, "requirements": req, "error": None,
+                    "attempts": attempt, "notes": notes}
         last_error, feedback, previous = "; ".join(errs), errs, parsed
-    return {"ok": False, "requirements": None, "attempts": 2, "notes": [],
-            "error": f"Could not parse the question into valid requirements: {last_error}"}
+    if all_api_failed:
+        return fail("api_unavailable", last_error, 2)
+    return fail("parse_failed",
+                f"Could not parse the question into valid requirements: {last_error}", 2)
