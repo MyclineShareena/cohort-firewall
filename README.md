@@ -1,3 +1,12 @@
+## Team
+- MyclineShareena John Peter Kennedy
+- Vinaya Rekha Avadhanam
+- Nithya Sarvepalli
+
+**Track:** Track 1 · Cohort Firewall
+**Demo video:** https://www.youtube.com/watch?v=Lpp6ocGcg_o
+**Data:** Synthetic data only (approved by the organizers for this project)
+
 # Cohort Firewall
 
 Oncology dataset readiness checker. **Synthetic data only. Not for clinical decision-making.**
