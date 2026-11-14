@@ -56,7 +56,12 @@ outcome counts and report how many were excluded.
 
 ## Checks
 Each returns {name, metric_cluster, severity: hard|soft,
-status: pass|fail|unknown, value, threshold, message}.
+status: pass|fail|unknown|not_applicable, value, threshold, message}.
+not_applicable is neutral for the verdict (treated like pass by rules.py)
+but is NEVER shown or described as passed: UI shows it gray; the explainer
+must say which checks were not applicable and why.
+9. Consistency: question terms mappable (unknown when unmappable_terms is
+   non-empty). unmappable_terms are never added to required_fields.
 1. Consistency: required fields exist with expected types.
 2. Informativeness: missingness, REQUIRED FIELDS ONLY
    (soft fail >20%, hard fail >40%).
