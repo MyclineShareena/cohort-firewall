@@ -119,7 +119,9 @@ def _kind(name: str, s: pd.Series) -> str:
 
 
 def profile_dataset(df: pd.DataFrame) -> dict:
-    """Column-level summary sent to Claude. No row values except category levels."""
+    """Column-level summary sent to Claude: names, kinds, missing fractions, category
+    levels (up to MAX_LEVELS_SHOWN) and each numeric column's min and max. No other
+    row values are sent."""
     cols = []
     for name in df.columns:
         s = df[name]

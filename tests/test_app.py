@@ -125,9 +125,9 @@ def test_verdict_is_largest_element(offline):
 
 
 @pytest.mark.parametrize("name,line", [
-    ("messy", "9 checks: 7 pass, 2 soft fail, 0 hard fail, 0 unknown, 0 not applicable"),
-    ("broken", "9 checks: 5 pass, 0 soft fail, 2 hard fail, 2 unknown, 0 not applicable"),
-    ("clean", "9 checks: 9 pass, 0 soft fail, 0 hard fail, 0 unknown, 0 not applicable"),
+    ("messy", "10 checks: 8 pass, 2 soft fail, 0 hard fail, 0 unknown, 0 not applicable"),
+    ("broken", "10 checks: 6 pass, 0 soft fail, 2 hard fail, 2 unknown, 0 not applicable"),
+    ("clean", "10 checks: 10 pass, 0 soft fail, 0 hard fail, 0 unknown, 0 not applicable"),
 ])
 def test_scorecard_line(offline, name, line):
     assert line in html_text(run_case(name))
@@ -154,7 +154,7 @@ def test_why_box_lists_only_driving_checks(offline):
 def test_passing_checks_collapsed(offline):
     at = run_case("messy")
     exp = [e for e in at.expander if "passing checks" in e.label]
-    assert len(exp) == 1 and exp[0].label == "7 passing checks"
+    assert len(exp) == 1 and exp[0].label == "8 passing checks"
     inside = "\n".join(m.value for m in exp[0].markdown)
     assert "required_fields_present" in inside and "✅ pass" in inside
     outside = [m.value for m in at.markdown if "<table" in m.value and m.value not in inside]
@@ -333,3 +333,16 @@ def test_cautious_decision_is_not_override(offline):
     _fill_review(at, "Approve with conditions")  # no notes needed
     assert at.session_state.review["override"] is False
     assert not any("differs from the tool's verdict" in w.value for w in at.warning)
+
+
+def test_plausibility_headline():
+    import app
+    chk = {"name": "record_plausibility", "status": "fail", "severity": "hard", "message": "x",
+           "value": {"duplicate_patient_ids": 2, "followup_before_diagnosis": 0, "out_of_range": {}}}
+    assert app.headline(chk) == "Some records can't be right: 2 duplicate patient row(s)."
+
+
+def test_sample_size_cards_have_plain_subtitles(offline):
+    md = [m.value for m in run_case("epv_vs_riley").markdown]
+    assert any("Are there enough patients for this many predictors?" in m for m in md)
+    assert any("at least 10 deaths per predictor" in m for m in md)

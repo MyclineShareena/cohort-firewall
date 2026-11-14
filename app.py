@@ -79,6 +79,14 @@ def headline(check: dict) -> str:
     if name == "sample_size" and status == "fail":
         return (f"Too few patients for {v['n_params']} predictors: Riley needs "
                 f"{v['n_required']:,}, this dataset has {v['n_available']:,}.")
+    if name == "record_plausibility" and status == "fail":
+        parts = []
+        if v["duplicate_patient_ids"]:
+            parts.append(f"{v['duplicate_patient_ids']} duplicate patient row(s)")
+        if v["followup_before_diagnosis"]:
+            parts.append(f"{v['followup_before_diagnosis']} follow-up date(s) before diagnosis")
+        parts += [f"impossible {c} values ({n})" for c, n in v["out_of_range"].items()]
+        return f"Some records can't be right: {_list(parts)}."
     if name == "required_field_missingness" and status == "fail":
         over = {c: f for c, f in v["by_column"].items() if f > 0.20}
         cols = _list(f"{c} {f:.0%}" for c, f in sorted(over.items(), key=lambda x: -x[1]))
@@ -294,7 +302,8 @@ def sample_size_cards_html(check: dict) -> tuple[str, str] | None:
     riley = _card(
         "RILEY ET AL. (BMJ 2020): decides the sample-size check",
         f"{'✅ Meets' if ok else '⚠️ Below'}: n = {v['n_available']:,} vs ≥ {v['n_required']:,}",
-        [f"Events: {v['events']:,} available vs {v['events_required']:,} needed",
+        ["Are there enough patients for this many predictors? This rule decides.",
+         f"Events: {v['events']:,} available vs {v['events_required']:,} needed",
          f"(i) shrinkage S ≥ 0.9: n ≥ {v['criterion_i']:,}",
          f"(ii) Nagelkerke optimism ≤ 0.05: n ≥ {v['criterion_ii']:,}",
          f"(iii) overall risk ± 0.05: n ≥ {v['criterion_iii']:,}",
@@ -305,7 +314,8 @@ def sample_size_cards_html(check: dict) -> tuple[str, str] | None:
         "EVENTS PER VARIABLE: rule of thumb, comparison only",
         f"{'✅' if v['epv_pass'] else '⚠️'} EPV = {v['epv']:.1f} "
         f"({'≥' if v['epv_pass'] else '<'} {v['epv_threshold']})",
-        [f"{v['events']:,} events / {v['n_params']} parameters",
+        ["An older, simpler rule: at least 10 deaths per predictor.",
+         f"{v['events']:,} events / {v['n_params']} parameters",
          "Shown for comparison; it does not affect the verdict."],
         "#57606a", "EPV ignores outcome prevalence and expected model fit; Riley accounts for both.")
     return riley, epv

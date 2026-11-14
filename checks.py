@@ -33,6 +33,10 @@ MIN_SUBGROUP = 30
 AGE_BINS, AGE_LABELS = [-1, 59, 69, 79, 200], ["<60", "60-69", "70-79", ">=80"]
 SUBGROUP_LEVELS = {"sex": ["M", "F"], "age_band": AGE_LABELS, "stage": ["I", "II", "III", "IV"]}
 EPV_MIN = 10
+# Physically possible ranges only (not clinical normal ranges): flag impossible values,
+# not unusual ones. None = no bound.
+PLAUSIBLE_RANGES = {"age": (0, 120), "ecog": (0, 5), "hemoglobin": (0, None),
+                    "albumin": (0, None), "ldh": (0, None), "wbc": (0, None)}
 
 LEAKAGE_NAME = re.compile(r"death|deceased|died|^dod$|^(os|survival)_(time|days|months)$")
 ID_NAME = re.compile(r"(^|_)id$")
@@ -187,6 +191,40 @@ def check_required_fields(df: pd.DataFrame, req: dict) -> dict:
                    f"All {len(cols)} required columns present with expected types.")
 
 
+def check_plausibility(df: pd.DataFrame, req: dict) -> dict:
+    """10. Consistency: duplicate patients and follow-up before diagnosis (hard);
+    physically impossible values in required numeric fields (soft)."""
+    name, cl = "record_plausibility", "consistency"
+    thr = {"duplicate_patient_ids": 0, "followup_before_diagnosis": 0,
+           "ranges": {c: list(r) for c, r in PLAUSIBLE_RANGES.items()}}
+    dup = int(df["patient_id"].dropna().duplicated().sum()) if "patient_id" in df else 0
+    order = 0
+    if _is_mortality(req) and {"diagnosis_date", "last_followup_date"} <= set(df.columns):
+        start = pd.to_datetime(df["diagnosis_date"], errors="coerce")
+        end = pd.to_datetime(df["last_followup_date"], errors="coerce")
+        order = int((end < start).sum())
+    out = {}
+    for c in _required_columns(req):
+        if c in PLAUSIBLE_RANGES and c in df.columns:
+            lo, hi = PLAUSIBLE_RANGES[c]
+            x = pd.to_numeric(df[c], errors="coerce")
+            n = int(((x < lo) | (x > hi if hi is not None else False)).sum())
+            if n:
+                out[c] = n
+    value = {"duplicate_patient_ids": dup, "followup_before_diagnosis": order, "out_of_range": out}
+    parts = []
+    if dup:
+        parts.append(f"{dup} duplicate patient_id row(s)")
+    if order:
+        parts.append(f"{order} patient(s) with last_followup_date before diagnosis_date")
+    parts += [f"{c}: {n} impossible value(s)" for c, n in out.items()]
+    if not parts:
+        return _result(name, cl, "soft", "pass", value, thr,
+                       "No duplicate patients, date-order errors or impossible values found.")
+    sev = "hard" if dup or order else "soft"
+    return _result(name, cl, sev, "fail", value, thr, "; ".join(parts).capitalize() + ".")
+
+
 def check_terms_mappable(req: dict) -> dict:
     """9. Consistency: every term in the question maps to a dataset column."""
     terms = list(req.get("unmappable_terms") or [])
@@ -235,11 +273,19 @@ def check_outcome(df: pd.DataFrame, req: dict) -> dict:
     """3. Informativeness: outcome present and derivable (hard)."""
     name, cl = "outcome_derivable", "informativeness"
     oc = req.get("outcome") or {}
+    if req.get("task_type") == "description" and not req.get("outcome"):
+        return _result(name, cl, "hard", "not_applicable", None, None,
+                       "Not applicable: a descriptive question with no outcome to derive.")
     if not _is_mortality(req):
         return _result(name, cl, "hard", "unknown", None, None,
                        f"Outcome '{oc.get('column')}' is not a supported outcome; only death "
                        "derived from vital_status and dates is supported.")
     absent = [c for c in OUTCOME_SOURCES if c not in df.columns]
+    if len(absent) == len(OUTCOME_SOURCES):
+        return _result(name, cl, "hard", "fail", None, None,
+                       "Unsupported schema: none of vital_status, diagnosis_date or "
+                       "last_followup_date is present. This tool derives death outcomes only "
+                       "from those columns; rename or map the file's columns to them.")
     if absent:
         return _result(name, cl, "hard", "fail", None, None,
                        f"Cannot derive the outcome: missing {', '.join(absent)}.")
@@ -400,6 +446,7 @@ def run_checks(df: pd.DataFrame, req: dict, anticipated_r2cs: float | None = Non
     cohort = apply_population(df, req.get("target_population"))
     return [
         check_required_fields(cohort, req),
+        check_plausibility(cohort, req),
         check_terms_mappable(req),
         check_missingness(cohort, req),
         check_outcome(cohort, req),

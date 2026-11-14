@@ -35,3 +35,14 @@ def test_not_applicable_is_neutral():
     assert r["verdict"] == "Ready" and r["driving_checks"] == []
     r = assign_verdict([c("na", "not_applicable"), c("s", "fail")])
     assert [x["name"] for x in r["driving_checks"]] == ["s"]
+
+
+def test_rule_text_returned_and_used_by_evidence_record():
+    import evidence as E
+    from rules import RULE_TEXT
+    cases = {"Blocked": [c("h", "fail", "hard")], "Insufficient Evidence": [c("u", "unknown")],
+             "Conditional": [c("s", "fail")], "Ready": [c("p", "pass")]}
+    for verdict, checks in cases.items():
+        r = assign_verdict(checks)
+        assert r["verdict"] == verdict and r["rule"] == RULE_TEXT[verdict]
+    assert E.DECISION_RULES is RULE_TEXT  # one source of truth

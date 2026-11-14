@@ -200,3 +200,16 @@ def test_ceil_count_ignores_float_noise():
     from sample_size import ceil_count
     assert 0.07 * 100 > 7 and ceil_count(0.07 * 100) == 7
     assert ceil_count(120.5) == 121 and ceil_count(114.18) == 115
+
+
+def test_plausibility_evidence_needed_and_fields():
+    import checks as C
+    res, ds = run("clean")
+    chk = {"name": "record_plausibility", "status": "fail", "severity": "hard",
+           "value": {"duplicate_patient_ids": 2, "followup_before_diagnosis": 1,
+                     "out_of_range": {"age": 1}}}
+    need = E.evidence_needed(chk, res["requirements"])
+    assert "duplicate patient_id" in need and "on or after diagnosis_date" in need and "age" in need
+    used = E.fields_used({"name": "record_plausibility"}, res["requirements"], ds["columns"])
+    assert used[:3] == ["patient_id", "diagnosis_date", "last_followup_date"] and "age" in used
+    assert set(used) - {"patient_id", "diagnosis_date", "last_followup_date"} <= set(C.PLAUSIBLE_RANGES)

@@ -10,18 +10,14 @@ import json
 from datetime import datetime, timezone
 
 import checks as C
+from rules import RULE_TEXT
 
 DECISIONS = ["Approve for this question", "Approve with conditions", "Reject"]
 REVIEW_PENDING = "Human review required before this dataset is used"
 SCOPE = ("Data readiness assessment of a synthetic dataset for one stated question. "
          "It is not a clinical decision, and it does not validate any model.")
 
-DECISION_RULES = {  # mirrors rules.py, in the order the rules are applied
-    "Blocked": "Any hard fail -> Blocked",
-    "Insufficient Evidence": "No hard fail, and any unknown -> Insufficient Evidence",
-    "Conditional": "No hard fail or unknown, and any soft fail -> Conditional",
-    "Ready": "No hard fail, unknown or soft fail -> Ready",
-}
+DECISION_RULES = RULE_TEXT  # single source: rules.py
 
 
 def _list(items) -> str:
@@ -43,6 +39,12 @@ def fields_used(check: dict, req: dict | None, columns: list[str]) -> list[str]:
     filters = [f["column"] for f in req.get("target_population") or []]
     if name in {"required_fields_present", "required_field_missingness"}:
         return C._required_columns(req)
+    if name == "record_plausibility":
+        cols = ["patient_id"] if "patient_id" in columns else []
+        if mortality:
+            cols += ["diagnosis_date", "last_followup_date"]
+        cols += [c for c in C._required_columns(req) if c in C.PLAUSIBLE_RANGES]
+        return list(dict.fromkeys(cols))
     if name in {"outcome_derivable", "early_censoring"}:
         return list(dict.fromkeys(filters + outcome))
     if name == "subgroup_counts":
@@ -68,6 +70,15 @@ def evidence_needed(check: dict, req: dict | None) -> str | None:
                     f"({v['events_required']:,} events), or a pre-specified model with fewer "
                     f"than {v['n_params']} parameters.")
         return "A derivable outcome and a stated number of candidate predictor parameters."
+    if name == "record_plausibility" and status == "fail":
+        fixes = []
+        if v["duplicate_patient_ids"]:
+            fixes.append("one row per patient (resolve the duplicate patient_id rows)")
+        if v["followup_before_diagnosis"]:
+            fixes.append("corrected dates so last_followup_date is on or after diagnosis_date")
+        if v["out_of_range"]:
+            fixes.append(f"corrected or removed impossible values in {_list(v['out_of_range'])}")
+        return "; ".join(fixes).capitalize() + "."
     if name == "required_field_missingness" and status == "fail":
         over = [f"{c} (now {f:.0%})" for c, f in v["by_column"].items() if f > C.MISSING_SOFT]
         return (f"At most 20% missing in {_list(over)}, from source-data review or a "

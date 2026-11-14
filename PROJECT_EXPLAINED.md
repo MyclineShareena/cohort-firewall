@@ -41,7 +41,7 @@ Two other ground rules:
 ```
 Your question ──► Claude turns it into a checklist (JSON)
                           │
-Your spreadsheet ──► 9 checks measure the data
+Your spreadsheet ──► 10 checks measure the data
                           │
                    Rules engine picks the verdict
                           │
@@ -124,13 +124,13 @@ The tests use it as the answer key.
 
 ### `checks.py`: the measuring tapes
 
-This holds **9 checks**. Each returns the same shape of result:
+This holds **10 checks**. Each returns the same shape of result:
 - name, and which quality category it belongs to (the METRIC framework, Schwabe et al., npj Digital Medicine 2024),
 - severity: **hard** (serious) or **soft** (warning),
 - status: **pass / fail / unknown / not_applicable**,
 - the measured value, the threshold, and a message.
 
-The nine checks:
+The ten checks:
 1. **`required_fields_present`**: do the needed columns exist, with sensible values? For example, is age a number? *(hard)*
 2. **`question_terms_mappable`**: does everything in the question match a column? "PD-L1 status" doesn't, so the result is unknown.
 3. **`required_field_missingness`**: how many blanks? Over 20% is a soft fail; over 40% is a hard fail.
@@ -140,11 +140,14 @@ The nine checks:
 7. **`label_leakage`**: is there a column that gives the answer away, like `date_of_death`? That's like taking an exam with the answer sheet attached. *(hard)*
 8. **`sample_size`**: are there enough patients? It uses `sample_size.py`.
 9. **`identifier_columns`**: does anything look like real personal info (names, social security numbers, phone numbers, emails, ZIP codes)? Patient IDs must look like `SYN-12345`. *(hard)*
+10. **`record_plausibility`**: are any records impossible? The same patient twice, or a last check-up *before* the diagnosis, is a hard fail. An impossible value in a needed column (like age 250) is a warning.
+
+If the question is descriptive (for example "describe the age and stage of these patients"), there is no outcome to work out, so `outcome_derivable`, `label_leakage` and `sample_size` are marked not applicable instead of blocking the result.
 
 Helper functions:
 - **`derive_binary_outcome`**: decides for each patient whether they died within the time window (1), survived past it (0) or are unknown.
 - **`apply_population`**: filters to the patients the question is about, e.g. "only stage III".
-- **`run_checks`**: runs all 9 checks in order.
+- **`run_checks`**: runs all 10 checks in order.
 
 "**not_applicable**" means the check doesn't apply to this question. For example, leakage only matters when predicting death. It never counts against you, but it's never shown as "passed" either. It appears in grey.
 
@@ -168,7 +171,7 @@ This is the shortest file and the most important. It checks four rules in order:
 3. Otherwise, any **soft fail**? → **Conditional**
 4. Otherwise → **Ready**
 
-It also returns which checks triggered the rule (the "driving checks"). No AI involved.
+It also returns which checks triggered the rule (the "driving checks") and the rule's exact wording, which the evidence record copies. No AI involved.
 
 ### `pipeline.py`: the conductor
 
@@ -225,7 +228,7 @@ Built with Streamlit, which turns Python into a web page.
 - **Main area:** the question box and the **Run** button.
 - **Results, top to bottom:**
   1. **Badge**: Live (Claude) or Offline.
-  2. **Verdict card**: big and colour-coded, with a score line ("9 checks: 7 pass, 2 soft fail...").
+  2. **Verdict card**: big and colour-coded, with a score line ("10 checks: 8 pass, 2 soft fail...").
   3. **Why box**: only the checks that caused the verdict, in plain English (`headline()`), plus what evidence would change it.
   4. **Riley vs EPV cards**, when sample size is the problem.
   5. **Human review form**: "Human review required before this dataset is used" shows until it's submitted.
@@ -247,7 +250,7 @@ Tests are little robots that check the code still works after every change. Run 
 | `conftest.py` | Setup so tests can import the project files |
 | `fakes.py` | A **fake Claude** that gives pre-set answers, so tests don't need internet or money |
 | `test_generate.py` | The fake data has exactly the promised numbers (560 deaths, etc.) |
-| `test_checks.py` | Each of the 9 checks catches what it should |
+| `test_checks.py` | Each of the 10 checks catches what it should |
 | `test_sample_size.py` | The Riley formula reproduces the published worked example (623 / 662 / 221 → 662) |
 | `test_rules.py` | The four verdict rules work in the right order |
 | `test_parser.py` | Bad Claude answers are caught; retry works; predictor counting is right |

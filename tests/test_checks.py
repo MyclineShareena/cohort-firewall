@@ -36,7 +36,7 @@ def by_name(results):
 
 def test_all_checks_return_spec_shape(base):
     results = C.run_checks(base, req())
-    assert len(results) == 9
+    assert len(results) == 10
     for r in results:
         assert set(r) == KEYS
         assert r["status"] in {"pass", "fail", "unknown", "not_applicable"}
@@ -294,3 +294,65 @@ def test_not_applicable_is_neutral_but_not_pass(files):
     assert results["sample_size"]["status"] == "not_applicable"
     v = assign_verdict(list(results.values()))
     assert v["verdict"] == "Ready" and v["driving_checks"] == []
+
+
+# ---------- review fixes: plausibility, descriptive questions, unsupported schema ----------
+
+def _plaus(df, **kw):
+    return C.check_plausibility(df, req(**kw))
+
+
+def test_plausibility_passes_on_clean_cohort(base):
+    r = _plaus(base)
+    assert r["status"] == "pass" and r["name"] == "record_plausibility"
+
+
+def test_duplicate_patient_is_hard_fail(base):
+    df = __import__("pandas").concat([base, base.iloc[[0]]], ignore_index=True)
+    r = _plaus(df)
+    assert (r["status"], r["severity"]) == ("fail", "hard")
+    assert r["value"]["duplicate_patient_ids"] == 1
+    assert assign_verdict(C.run_checks(df, req()))["verdict"] == "Blocked"
+
+
+def test_followup_before_diagnosis_is_hard_fail(base):
+    df = base.copy()
+    df.loc[0, "last_followup_date"] = "1990-01-01"
+    r = _plaus(df)
+    assert (r["status"], r["severity"]) == ("fail", "hard")
+    assert r["value"]["followup_before_diagnosis"] == 1
+
+
+def test_impossible_value_in_required_field_is_soft_fail(base):
+    df = base.copy()
+    df.loc[0, "age"] = 250
+    r = _plaus(df)
+    assert (r["status"], r["severity"]) == ("fail", "soft")
+    assert r["value"]["out_of_range"] == {"age": 1}
+
+
+def test_impossible_value_in_unused_field_not_reported(base):
+    df = base.copy()
+    df.loc[0, "wbc"] = -5  # wbc is not in FIELDS_10
+    assert _plaus(df)["status"] == "pass"
+
+
+def test_descriptive_question_without_outcome_can_be_ready(base):
+    r = req(task_type="description", outcome=None, time_horizon_months=None,
+            n_predictor_parameters=None, required_fields=["age", "stage"])
+    results = by_name(C.run_checks(base, r))
+    assert results["outcome_derivable"]["status"] == "not_applicable"
+    assert results["sample_size"]["status"] == "not_applicable"
+    assert results["label_leakage"]["status"] == "not_applicable"
+    assert assign_verdict(list(results.values()))["verdict"] == "Ready"
+
+
+def test_prediction_with_unsupported_outcome_still_unknown(base):
+    r = req(outcome={"column": "albumin", "type": "binary"})
+    assert by_name(C.run_checks(base, r))["outcome_derivable"]["status"] == "unknown"
+
+
+def test_unsupported_schema_message(base):
+    df = base.drop(columns=["vital_status", "diagnosis_date", "last_followup_date"])
+    r = C.check_outcome(df, req())
+    assert r["status"] == "fail" and r["message"].startswith("Unsupported schema")

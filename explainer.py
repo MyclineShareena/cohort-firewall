@@ -23,6 +23,8 @@ FALLBACK_ACTIONS = {
     "required_fields_present": "Add or correct the missing or invalid required columns, then re-run.",
     "question_terms_mappable": "Add a column for the unmapped terms, or rephrase the question "
                                "without them.",
+    "record_plausibility": "Remove duplicate patient rows and correct impossible values or "
+                           "date-order errors at the source, then re-run.",
     "required_field_missingness": "Reduce missingness in the listed fields through source-data "
                                   "review, or plan and justify an imputation strategy.",
     "outcome_derivable": "Provide vital_status, diagnosis_date and last_followup_date so the "

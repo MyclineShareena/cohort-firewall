@@ -65,7 +65,9 @@ must say which checks were not applicable and why.
 1. Consistency: required fields exist with expected types.
 2. Informativeness: missingness, REQUIRED FIELDS ONLY
    (soft fail >20%, hard fail >40%).
-3. Informativeness: outcome present and derivable (hard).
+3. Informativeness: outcome present and derivable (hard). not_applicable
+   for a descriptive question with no outcome. If none of vital_status,
+   diagnosis_date, last_followup_date exist: "Unsupported schema" message.
 4. Timeliness: early censoring (soft fail >15% excluded).
 5. Representativeness: subgroups (sex, age band, stage) above minimum
    counts.
@@ -74,6 +76,9 @@ must say which checks were not applicable and why.
 7. Sample size: Riley criteria (SOFT fail) plus EPV >= 10 shown for
    comparison.
 8. Safety: columns resembling real identifiers (hard).
+10. Consistency: record_plausibility. Duplicate patient_id or
+    last_followup_date before diagnosis_date (hard); physically impossible
+    values in required numeric fields, e.g. age outside 0-120 (soft).
 
 ## Sample size (sample_size.py), binary outcome
 - Criterion (i): n = P / ((S - 1) * ln(1 - R2cs / S)), S = 0.9,
@@ -88,7 +93,8 @@ must say which checks were not applicable and why.
 ## Verdict rules (rules.py)
 Any hard fail -> Blocked; else any unknown -> Insufficient Evidence;
 else any soft fail -> Conditional; else Ready. Return verdict plus the
-checks that drove it.
+checks that drove it and the rule text (RULE_TEXT, the single source the
+evidence record uses).
 A verdict only ever describes the data. Missing API setup returns status
 "setup_required", and an unreachable API returns "api_unavailable"; neither
 has a verdict. The UI message for both is "Reading a new question needs live

@@ -7,18 +7,30 @@ passes; callers must show and describe them separately.
 """
 from __future__ import annotations
 
+RULE_TEXT = {  # the rule that fired, in the order the rules are applied
+    "Blocked": "Any hard fail -> Blocked",
+    "Insufficient Evidence": "No hard fail, and any unknown -> Insufficient Evidence",
+    "Conditional": "No hard fail or unknown, and any soft fail -> Conditional",
+    "Ready": "No hard fail, unknown or soft fail -> Ready",
+}
+
+
+def _verdict(verdict: str, driving: list[dict]) -> dict:
+    return {"verdict": verdict, "driving_checks": driving, "rule": RULE_TEXT[verdict]}
+
 
 def assign_verdict(checks: list[dict]) -> dict:
-    """Return {"verdict", "driving_checks"} (the checks that triggered the rule)."""
+    """Return {"verdict", "driving_checks", "rule"}: the checks that triggered the
+    rule, and the rule's text (used verbatim by the evidence record)."""
     if not checks:
-        return {"verdict": "Insufficient Evidence", "driving_checks": []}
+        return _verdict("Insufficient Evidence", [])
     hard = [c for c in checks if c["status"] == "fail" and c["severity"] == "hard"]
     if hard:
-        return {"verdict": "Blocked", "driving_checks": hard}
+        return _verdict("Blocked", hard)
     unknown = [c for c in checks if c["status"] == "unknown"]
     if unknown:
-        return {"verdict": "Insufficient Evidence", "driving_checks": unknown}
+        return _verdict("Insufficient Evidence", unknown)
     soft = [c for c in checks if c["status"] == "fail"]
     if soft:
-        return {"verdict": "Conditional", "driving_checks": soft}
-    return {"verdict": "Ready", "driving_checks": []}
+        return _verdict("Conditional", soft)
+    return _verdict("Ready", [])
