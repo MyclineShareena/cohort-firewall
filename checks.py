@@ -141,6 +141,7 @@ def _required_columns(req: dict) -> list[str]:
     """Required fields + filter columns + outcome sources. unmappable_terms are
     deliberately NOT included (they go to check_terms_mappable)."""
     cols = list(req.get("required_fields") or [])
+    cols += list(req.get("predictor_columns") or [])
     cols += [f["column"] for f in req.get("target_population") or []]
     oc = (req.get("outcome") or {}).get("column")
     if _is_mortality(req):
@@ -195,6 +196,13 @@ def check_terms_mappable(req: dict) -> dict:
                        "represents; readiness for that part cannot be assessed.")
     return _result("question_terms_mappable", "consistency", "hard", "pass", [], "none",
                    "All terms in the question map to dataset columns.")
+
+
+def check_question_parsed(error: str, config_error: bool = False) -> dict:
+    """Consistency: the question could not be turned into valid requirements."""
+    return _result("question_parsed", "consistency", "hard", "unknown",
+                   {"config_error": config_error}, None,
+                   f"The question could not be evaluated: {error}")
 
 
 def check_missingness(df: pd.DataFrame, req: dict) -> dict:
