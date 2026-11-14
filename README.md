@@ -57,3 +57,13 @@ explanation is built from the checks' own messages. Any other question shows
 and no verdict. The result data keeps the technical reason in `detail`
 (`Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL`, or the API error type), with status
 `setup_required` or `api_unavailable`.
+
+## Milestone 5 (bonus): Claude-alone vs rules engine
+Measures how often Claude, judging dataset readiness on its own with no
+checks or rules engine, agrees with the actual rules-engine verdict across 13
+scenarios. See [experiments/README.md](experiments/README.md) to run it (needs
+a live API key).
+
+## Tests
+`.venv/bin/pytest -q` passes offline: 278 passed, 1 skipped, 6 deselected
+(live-API tests, run explicitly with `-m live`).

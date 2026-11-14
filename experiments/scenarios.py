@@ -2,7 +2,8 @@
 
 Extends the six DEMO_CASES with scenarios that drive checks and task types the
 demo set never exercises (early_censoring, subgroup_counts, identifier_columns,
-a "description" task with no outcome, a "comparison" task). "requirements" is
+record_plausibility, a "description" task with no outcome, a "comparison"
+task). "requirements" is
 fed straight to checks.run_checks (no Claude parsing involved): it is the
 ground truth the rules engine evaluates. tests/test_scenarios.py asserts each
 scenario's declared "verdict"/"driving" actually comes out of
@@ -73,8 +74,21 @@ NEW_SCENARIOS = [
         "question": "Describe the baseline age, sex, stage and ECOG distribution of the cohort.",
         "requirements": _req(["age", "sex", "stage", "ecog"], [], None, "description", None, None,
                              population_from_description=LUNG),
-        "verdict": "Insufficient Evidence",
-        "driving": {"outcome_derivable"},
+        # A descriptive question needs no outcome, so outcome_derivable/label_leakage/sample_size
+        # are not_applicable rather than unknown: a test of whether Claude-alone realizes a
+        # description task doesn't need a derivable outcome, rather than wrongly downgrading it.
+        "verdict": "Ready",
+        "driving": set(),
+    },
+    {
+        "name": "duplicate_patient_blocked",
+        "file": "duplicate_patient.csv",
+        "description": DESCRIPTION,
+        "question": QUESTION,
+        "requirements": _req(FIELDS_11, FIELDS_11, DEATH_24M, "prediction", 24, 11,
+                             population_from_description=LUNG),
+        "verdict": "Blocked",
+        "driving": {"record_plausibility"},
     },
     {
         "name": "comparison_stage_mortality",

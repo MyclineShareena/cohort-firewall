@@ -6,9 +6,9 @@ from experiments.scenarios import SCENARIOS
 from rules import assign_verdict
 
 ALL_CHECK_NAMES = {
-    "required_fields_present", "question_terms_mappable", "required_field_missingness",
-    "outcome_derivable", "early_censoring", "subgroup_counts", "label_leakage",
-    "sample_size", "identifier_columns",
+    "required_fields_present", "record_plausibility", "question_terms_mappable",
+    "required_field_missingness", "outcome_derivable", "early_censoring", "subgroup_counts",
+    "label_leakage", "sample_size", "identifier_columns",
 }
 
 

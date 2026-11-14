@@ -5,11 +5,11 @@ deterministic checks, no rules engine), agrees with the actual rules-engine
 verdict. This is the baseline the project's "rules decide, Claude explains"
 design argues against; it never runs inside the app.
 
-- `scenarios.py`: 12 question/dataset pairs with a known rules-engine verdict
-  (the six `DEMO_CASES` from `data/demo_cases.py` plus six more covering
+- `scenarios.py`: 13 question/dataset pairs with a known rules-engine verdict
+  (the six `DEMO_CASES` from `data/demo_cases.py` plus seven more covering
   checks and task types the demo set doesn't exercise: early censoring, a
-  small subgroup, an identifier-like column, a description task with no
-  outcome, and a comparison task).
+  small subgroup, an identifier-like column, a duplicated patient record, a
+  description task with no outcome, and a comparison task).
 - `claude_alone.py`: gives Claude the same inputs the real parser sees
   (question, description, column profile; never patient rows) and asks it to
   return a verdict directly.

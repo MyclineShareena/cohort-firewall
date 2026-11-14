@@ -145,13 +145,18 @@ def build_all() -> dict[str, pd.DataFrame]:
         rng.integers(100, 999, len(identifiers)), rng.integers(10, 99, len(identifiers)),
         rng.integers(1000, 9999, len(identifiers)))]
 
+    # clean + one duplicated patient row, for the record_plausibility check (Milestone 5).
+    duplicate_patient = pd.concat([clean, clean.iloc[[0]]], ignore_index=True)
+
     return {"clean": clean, "messy": messy, "broken": broken,
-            "leakage": leakage, "epv_vs_riley": epv_vs_riley, "identifiers": identifiers}
+            "leakage": leakage, "epv_vs_riley": epv_vs_riley, "identifiers": identifiers,
+            "duplicate_patient": duplicate_patient}
 
 
 EXPECTED = {"clean": "Ready", "messy": "Conditional", "broken": "Blocked",
             "leakage": "Blocked", "epv_vs_riley": "Conditional (EPV passes, Riley fails)",
-            "identifiers": "Blocked (identifier_columns)"}
+            "identifiers": "Blocked (identifier_columns)",
+            "duplicate_patient": "Blocked (record_plausibility)"}
 
 
 def main() -> None:
