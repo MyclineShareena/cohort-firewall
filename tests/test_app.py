@@ -218,3 +218,79 @@ def test_r2cs_written_as_superscript(offline, case):
     ss = next(c for c in at.session_state.result["checks"] if c["name"] == "sample_size")
     if ss["status"] in {"pass", "fail"}:  # computed -> the R²cs note is shown
         assert "R²cs" in text
+
+
+# ------------------------------------------------------------------ human review, evidence record
+
+PENDING = "Human review required before this dataset is used"
+
+
+def _review_submit(at):
+    return next(b for b in at.button if b.label == "Submit review")
+
+
+@pytest.mark.parametrize("case", DEMO_CASES, ids=lambda c: c["name"])
+def test_review_pending_banner_and_panel(offline, case):
+    at = run_case(case["name"])
+    assert PENDING in [w.value for w in at.warning]
+    assert at.text_input(key="review_name") and at.checkbox(key="review_checked")
+    assert at.radio(key="review_decision").options == [
+        "Approve for this question", "Approve with conditions", "Reject"]
+    subs = [s.value for s in at.subheader]
+    assert subs.index("Human review") == 0  # first section under the verdict card
+    assert subs.index("Human review") < subs.index("Explanation")
+
+
+def test_review_requires_checkbox_and_keeps_verdict(offline):
+    at = run_case("leakage")
+    at.text_input(key="review_name").input("Dr A")
+    at.radio(key="review_decision").set_value("Approve for this question")
+    _review_submit(at).click().run()
+    assert "Tick \"I have reviewed the evidence\"." in [e.value for e in at.error]
+    assert "review" not in at.session_state and PENDING in [w.value for w in at.warning]
+
+    at.checkbox(key="review_checked").check()
+    _review_submit(at).click().run()
+    assert not at.exception
+    assert PENDING not in [w.value for w in at.warning]
+    assert any("Review recorded: Approve for this question, by Dr A" in s.value
+               for s in at.success)
+    assert at.session_state.result["verdict"] == "Blocked"  # verdict never changes
+    assert ">Blocked</div>" in html_text(at)
+    import app
+    rec = app.E.build_record(at.session_state.result, at.session_state.review,
+                             at.session_state.dataset_info)
+    assert rec["human_review"]["decision"] == "Approve for this question"
+    assert rec["verdict"] == "Blocked" and rec["dataset"]["name"] == "leakage.csv"
+
+
+def test_new_run_resets_review(offline):
+    at = run_case("clean")
+    at.text_input(key="review_name").input("Dr A")
+    at.checkbox(key="review_checked").check()
+    at.radio(key="review_decision").set_value("Reject")
+    _review_submit(at).click().run()
+    assert "review" in at.session_state
+    at.button[0].click().run()  # Run again
+    assert "review" not in at.session_state and PENDING in [w.value for w in at.warning]
+
+
+def test_evidence_downloads_and_limitations_on_page(offline):
+    at = run_case("epv_vs_riley")
+    labels = [d.proto.label for d in at.get("download_button")]
+    assert labels == ["Download JSON", "Download Markdown"]
+    subs = [s.value for s in at.subheader]
+    assert "Evidence record" in subs and "Limitations" in subs
+    text = _all_text(at)
+    assert "anticipated R²cs" in text and "does not assess clinical validity" in text
+
+
+def test_evidence_needed_in_why_box_and_table(offline):
+    at = run_case("epv_vs_riley")
+    why = next(m.value for m in at.markdown if "cf-why" in m.value)
+    assert "Evidence needed to reconsider:" in why
+    assert "A cohort of at least 1,205 patients" in why
+    tables = "\n".join(m.value for m in at.markdown if "<table" in m.value)
+    assert "Evidence needed to reconsider:" in tables
+    clean_tables = "\n".join(m.value for m in run_case("clean").markdown if "<table" in m.value)
+    assert "Evidence needed to reconsider" not in clean_tables  # passing checks: none

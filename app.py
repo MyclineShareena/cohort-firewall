@@ -12,6 +12,7 @@ import html
 import pandas as pd
 import streamlit as st
 
+import evidence as E
 from data.demo_cases import DEMO_CASES
 from pipeline import CACHED_LABEL, DATA_DIR, assess
 
@@ -172,6 +173,14 @@ def render_verdict_card(result: dict) -> None:
         unsafe_allow_html=True)
 
 
+def _needed_html(check: dict, req: dict | None) -> str:
+    need = E.evidence_needed(check, req)
+    if not need:
+        return ""
+    return (f'<div class="cf-needed" style="font-size:0.88rem;opacity:0.85;margin-top:2px">'
+            f'<i>Evidence needed to reconsider:</i> {html.escape(need)}</div>')
+
+
 def why_box_html(result: dict) -> str:
     """Only the checks that drove the verdict."""
     color = VERDICT_STYLE[result["verdict"]][0]
@@ -179,7 +188,8 @@ def why_box_html(result: dict) -> str:
     if driving:
         items = "".join(
             f'<li><b>{html.escape(status_label(c))}</b> {html.escape(headline(c))} '
-            f'<code style="opacity:0.7">{html.escape(c["name"])}</code></li>' for c in driving)
+            f'<code style="opacity:0.7">{html.escape(c["name"])}</code>'
+            f'{_needed_html(c, result["requirements"])}</li>' for c in driving)
         body = f'<ul style="margin:4px 0 0 0;padding-left:20px">{items}</ul>'
     else:
         body = "<div>No check failed or was inconclusive.</div>"
@@ -224,15 +234,17 @@ def _render_next_actions(ex: dict) -> None:
 _CELL = "padding:6px 8px;border-bottom:1px solid rgba(128,128,128,0.25);vertical-align:top"
 
 
-def checks_table_html(checks: list[dict]) -> str:
-    """Full-width table, message column wraps; not-applicable rows gray."""
+def checks_table_html(checks: list[dict], req: dict | None = None) -> str:
+    """Full-width table, message column wraps; not-applicable rows gray. Failing and
+    unknown checks also say what evidence would let them be reconsidered."""
     rows = []
     for c in checks:
         gray = "color:#8c959f;" if c["status"] == "not_applicable" else ""
         rows.append(
             f'<tr style="{gray}"><td style="{_CELL};white-space:nowrap">{html.escape(status_label(c))}</td>'
             f'<td style="{_CELL}"><code>{html.escape(c["name"])}</code></td>'
-            f'<td style="{_CELL};overflow-wrap:anywhere">{html.escape(c["message"])}</td></tr>')
+            f'<td style="{_CELL};overflow-wrap:anywhere">{html.escape(c["message"])}'
+            f'{_needed_html(c, req)}</td></tr>')
     head = "".join(f'<th style="{_CELL};text-align:left">{h}</th>'
                    for h in ("Status", "Check", "Message"))
     return ('<table style="width:100%;border-collapse:collapse;table-layout:fixed;'
@@ -246,7 +258,7 @@ def render_checks(result: dict) -> None:
     open_checks = [c for c in result["checks"] if c["status"] != "pass"]
     passing = [c for c in result["checks"] if c["status"] == "pass"]
     if open_checks:
-        _render_cluster_tables(open_checks)
+        _render_cluster_tables(open_checks, result["requirements"])
     else:
         st.write("Every check passed.")
     if passing:
@@ -254,12 +266,12 @@ def render_checks(result: dict) -> None:
             _render_cluster_tables(passing)
 
 
-def _render_cluster_tables(checks: list[dict]) -> None:
+def _render_cluster_tables(checks: list[dict], req: dict | None = None) -> None:
     for cluster in CLUSTER_ORDER:
         group = [c for c in checks if c["metric_cluster"] == cluster]
         if group:
             st.markdown(f"**{cluster.capitalize()}**")
-            st.markdown(checks_table_html(group), unsafe_allow_html=True)
+            st.markdown(checks_table_html(group, req), unsafe_allow_html=True)
 
 
 def _card(title: str, headline: str, lines: list[str], color: str, footer: str) -> str:
@@ -323,6 +335,59 @@ def render_sample_size(result: dict) -> None:
     st.caption(ss["value"]["r2cs_note"])
 
 
+def render_review(result: dict) -> None:
+    """Human review, recorded alongside the verdict. It never changes the verdict."""
+    st.subheader("Human review")
+    review = st.session_state.get("review")
+    if review:
+        st.success(f"Review recorded: {review['decision']}, by {review['reviewer']} at "
+                   f"{review['submitted_at']}. The tool's verdict ({result['verdict']}) is "
+                   "unchanged; the review is recorded alongside it.")
+        if review["notes"]:
+            st.caption(f"Notes: {review['notes']}")
+        return
+    st.warning(E.REVIEW_PENDING)
+    with st.form("review_form"):
+        reviewer = st.text_input("Reviewer name", key="review_name")
+        reviewed = st.checkbox("I have reviewed the evidence", key="review_checked")
+        decision = st.radio("Decision", E.DECISIONS, index=None, key="review_decision")
+        notes = st.text_area("Notes", key="review_notes", height=80)
+        submitted = st.form_submit_button("Submit review")
+    if submitted:
+        errors = E.validate_review(reviewer, reviewed, decision)
+        if errors:
+            for e in errors:
+                st.error(e)
+            return
+        st.session_state.review = E.make_review(reviewer, reviewed, decision, notes,
+                                                result["verdict"])
+        st.rerun()
+
+
+def current_record(result: dict) -> dict:
+    return E.build_record(result, st.session_state.get("review"),
+                          st.session_state.get("dataset_info"))
+
+
+def render_evidence_record(result: dict) -> None:
+    st.subheader("Evidence record")
+    record = current_record(result)
+    pending = record["human_review"]["status"] == "pending"
+    st.caption("Question, parsed requirements, verdict, every check, the decision rule, "
+               "limitations and the review decision."
+               + (" Human review is still pending." if pending else ""))
+    left, right = st.columns(2)
+    left.download_button("Download JSON", E.record_json(record),
+                         file_name="cohort_firewall_evidence.json", mime="application/json")
+    right.download_button("Download Markdown", E.record_markdown(record),
+                          file_name="cohort_firewall_evidence.md", mime="text/markdown")
+
+
+def render_limitations(result: dict) -> None:
+    st.subheader("Limitations")
+    st.markdown("\n".join(f"- {x}" for x in E.limitations(result)))
+
+
 def render_result(result: dict) -> None:
     render_badge(result)
     if result["status"] != "ok":
@@ -333,6 +398,7 @@ def render_result(result: dict) -> None:
     ss_driving = next((c for c in result["driving_checks"] if c["name"] == "sample_size"), None)
     if ss_driving:
         render_sample_size_cards(ss_driving)
+    render_review(result)
     for note in result["notes"]:
         st.info(note)
     render_explanation(result)
@@ -342,6 +408,8 @@ def render_result(result: dict) -> None:
     with st.expander("Parsed requirements"):
         st.caption(f"Parse source: {result['parse_source']}")
         st.json(result["requirements"] or {"error": result["parse"]["error"]})
+    render_evidence_record(result)
+    render_limitations(result)
     st.caption(SAFETY_NOTE)
 
 
@@ -357,6 +425,7 @@ def _select_case() -> None:
     st.session_state.question = case["question"]
     st.session_state.description = case["description"]
     st.session_state.pop("result", None)
+    st.session_state.pop("review", None)
 
 
 def main() -> None:
@@ -394,6 +463,11 @@ def main() -> None:
     run = st.button("Run", type="primary",
                     disabled=df is None or not st.session_state.question.strip())
     if run:
+        st.session_state.pop("review", None)  # a new result needs a new review
+        st.session_state.dataset_info = {
+            "name": CASES[st.session_state.case]["file"] if source == "Demo case"
+            else getattr(up, "name", "uploaded CSV"),
+            "rows": len(df), "columns": list(df.columns)}
         with st.spinner("Assessing..."):
             st.session_state.result = assess(
                 df, st.session_state.question, st.session_state.description.strip() or None,
