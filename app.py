@@ -277,7 +277,7 @@ def _render_cluster_tables(checks: list[dict], req: dict | None = None) -> None:
 def _card(title: str, headline: str, lines: list[str], color: str, footer: str) -> str:
     body = "".join(f"<div>{html.escape(x)}</div>" for x in lines)
     return (f'<div style="border:1px solid {color};border-top:6px solid {color};border-radius:8px;'
-            f'padding:12px 16px;height:100%;background:{color}12">'
+            f'padding:12px 16px;margin-bottom:12px;background:{color}12">'
             f'<div style="font-size:0.8rem;opacity:0.8">{html.escape(title)}</div>'
             f'<div style="font-size:1.35rem;font-weight:700;color:{color};margin:2px 0 6px">'
             f'{html.escape(headline)}</div>{body}'
@@ -319,6 +319,8 @@ def render_sample_size_cards(check: dict) -> None:
     left, right = st.columns(2)
     left.markdown(cards[0], unsafe_allow_html=True)
     right.markdown(cards[1], unsafe_allow_html=True)
+    st.markdown('<div class="cf-cards-spacer" style="height:1.5rem"></div>',
+                unsafe_allow_html=True)  # keep the next section clear of the cards
 
 
 def render_sample_size(result: dict) -> None:
