@@ -54,3 +54,12 @@ def test_broken_and_leakage(files):
 def test_ids_are_synthetic(files):
     for df in files.values():
         assert df["patient_id"].str.fullmatch(r"SYN-\d{5}").all()
+
+
+def test_clean_stage_i_ii_rates_differ(files):
+    df = files["clean"]
+    y = derive_binary_outcome(df, 24)
+    rate = df.assign(y=y).dropna(subset=["y"]).groupby("stage")["y"].mean()
+    assert abs(rate["I"] - 0.07) < 0.01
+    assert abs(rate["II"] - 0.15) < 0.01
+    assert rate["I"] < rate["II"] < rate["III"] < rate["IV"]

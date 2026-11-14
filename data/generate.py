@@ -26,10 +26,18 @@ HORIZON_DAYS = 730          # events: follow-up <= 730 days
 SAFE_NON_EVENT_DAYS = 732   # non-events: follow-up >= 732 days (> 24 * 30.4375)
 DX_START, DX_END = pd.Timestamp("2015-01-01"), pd.Timestamp("2021-12-31")
 DATA_CUTOFF = pd.Timestamp("2024-12-31")  # at least 3 years of potential follow-up
+# 24-month death rates for early stages in clean.csv (and leakage.csv, derived from it).
+STAGE_I_II_RATES = {"I": 0.07, "II": 0.15}
 
 
-def make_cohort(n: int, events_24m: int, censored_early: int, seed: int) -> pd.DataFrame:
-    """Build a synthetic cohort with exact 24-month event and censoring counts."""
+def make_cohort(n: int, events_24m: int, censored_early: int, seed: int,
+                stage_event_rates: dict[str, float] | None = None) -> pd.DataFrame:
+    """Build a synthetic cohort with exact 24-month event and censoring counts.
+
+    stage_event_rates (optional), e.g. {"I": 0.07, "II": 0.15}: fixes the
+    24-month death rate among outcome-known patients in those stages; the
+    remaining events are drawn from the other stages by risk score.
+    """
     assert events_24m + censored_early <= n
     rng = np.random.default_rng(seed)
 
@@ -63,9 +71,25 @@ def make_cohort(n: int, events_24m: int, censored_early: int, seed: int) -> pd.D
           - 0.8 * (albumin - 3.8) + 0.5 * np.log(ldh / 220) + rng.normal(0, 0.3, n))
     p = np.exp(lp) / np.exp(lp).sum()
     idx = np.arange(n)
-    event_idx = rng.choice(idx, events_24m, replace=False, p=p)
+    if stage_event_rates is None:
+        event_idx = rng.choice(idx, events_24m, replace=False, p=p)
+        rest = np.setdiff1d(idx, event_idx)
+        cens_idx = rng.choice(rest, censored_early, replace=False)
+    else:
+        # Censor first, so per-stage rates apply to outcome-known patients.
+        cens_idx = rng.choice(idx, censored_early, replace=False)
+        known = np.setdiff1d(idx, cens_idx)
+        picked = []
+        for stg, rate in stage_event_rates.items():
+            pool = known[stage[known] == stg]
+            k = int(round(rate * len(pool)))
+            picked.append(rng.choice(pool, k, replace=False, p=p[pool] / p[pool].sum()))
+        pool = known[~np.isin(stage[known], list(stage_event_rates))]
+        k = events_24m - sum(len(x) for x in picked)
+        assert 0 <= k <= len(pool)
+        picked.append(rng.choice(pool, k, replace=False, p=p[pool] / p[pool].sum()))
+        event_idx = np.concatenate(picked)
     rest = np.setdiff1d(idx, event_idx)
-    cens_idx = rng.choice(rest, censored_early, replace=False)
     long_idx = np.setdiff1d(rest, cens_idx)
 
     dx_span = (DX_END - DX_START).days
@@ -97,7 +121,8 @@ def make_cohort(n: int, events_24m: int, censored_early: int, seed: int) -> pd.D
 
 
 def build_all() -> dict[str, pd.DataFrame]:
-    clean = make_cohort(n=2000, events_24m=560, censored_early=60, seed=SEED)
+    clean = make_cohort(n=2000, events_24m=560, censored_early=60, seed=SEED,
+                        stage_event_rates=STAGE_I_II_RATES)
 
     messy = make_cohort(n=600, events_24m=40, censored_early=50, seed=SEED + 1)
     rng = np.random.default_rng(SEED + 101)
