@@ -78,11 +78,12 @@ def test_r2_passed_through(files):
 
 def test_missing_setup_returns_no_verdict(files, monkeypatch):
     import parser as P
-    from pipeline import SETUP_MESSAGE
+    from pipeline import OFFLINE_MESSAGE, SETUP_DETAIL
     monkeypatch.setattr(P, "load_env", lambda: None)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
     res = assess(files["clean"], "Does albumin predict 12-month death?", DESCRIPTION)
-    assert res["status"] == "setup_required" and res["message"] == SETUP_MESSAGE
+    assert res["status"] == "setup_required" and res["message"] == OFFLINE_MESSAGE
+    assert res["detail"] == SETUP_DETAIL
     assert res["verdict"] is None and res["checks"] is None
 
 

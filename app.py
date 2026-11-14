@@ -267,10 +267,7 @@ def render_sample_size(result: dict) -> None:
 def render_result(result: dict) -> None:
     render_badge(result)
     if result["status"] != "ok":
-        st.warning(result["message"])
-        if result["status"] == "setup_required":
-            st.caption("Offline demo mode covers only the six demo cases with their original "
-                       "questions.")
+        st.warning(result["message"])  # technical detail stays in result["detail"]
         return
     render_verdict_card(result)
     st.markdown(why_box_html(result), unsafe_allow_html=True)

@@ -7,7 +7,8 @@ import pytest
 import parser as P
 from data.demo_cases import DEMO_CASES, DESCRIPTION
 from fakes import FakeClient
-from pipeline import CACHED_LABEL, DATA_DIR, SETUP_MESSAGE, assess, match_demo_case
+from pipeline import (CACHED_LABEL, DATA_DIR, OFFLINE_MESSAGE, SETUP_DETAIL, assess,
+                      match_demo_case)
 
 
 @pytest.fixture
@@ -48,7 +49,8 @@ def test_demo_case_with_api_errors_uses_cache():
 def test_non_demo_question_returns_setup_required(no_setup):
     res = assess(read("clean.csv"), "Does albumin predict 12-month death?", DESCRIPTION)
     assert res["status"] == "setup_required"
-    assert res["message"] == SETUP_MESSAGE
+    assert res["message"] == OFFLINE_MESSAGE
+    assert res["detail"] == SETUP_DETAIL
     assert res["verdict"] is None and res["checks"] is None and res["explanation"] is None
 
 
@@ -69,7 +71,8 @@ def test_non_demo_with_api_errors_is_api_unavailable():
     res = assess(read("clean.csv"), "Does albumin predict 12-month death?", DESCRIPTION,
                  client=api_down(), model="test-model")
     assert res["status"] == "api_unavailable" and res["verdict"] is None
-    assert "APIConnectionError" in res["message"]
+    assert res["message"] == OFFLINE_MESSAGE
+    assert "APIConnectionError" in res["detail"] and "APIConnectionError" not in res["message"]
 
 
 def test_question_match_ignores_case_and_whitespace():

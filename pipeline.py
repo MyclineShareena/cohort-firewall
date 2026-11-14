@@ -4,6 +4,8 @@ Result "status":
   "ok"              -> a verdict describing the data
   "setup_required"  -> ANTHROPIC_API_KEY / ANTHROPIC_MODEL missing; no verdict
   "api_unavailable" -> the API could not be reached/used; no verdict
+For both, "message" is the user-facing text (no technical detail) and "detail"
+carries the technical reason (env var names, API error type).
 A verdict only ever describes the data, never the tool's own setup.
 
 Offline demo mode: when the API is unavailable and the input is exactly a demo
@@ -27,7 +29,9 @@ from rules import assign_verdict
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 CACHED_LABEL = "cached parse (offline)"
-SETUP_MESSAGE = "Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL"
+OFFLINE_MESSAGE = ("Reading a new question needs live Claude. "
+                   "The six demo questions work offline.")
+SETUP_DETAIL = "Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL"
 
 
 def _df_fingerprint(df: pd.DataFrame) -> str:
@@ -52,8 +56,8 @@ def match_demo_case(df: pd.DataFrame, question: str) -> dict | None:
     return None
 
 
-def _no_verdict(status: str, message: str, parse: dict, question, description) -> dict:
-    return {"status": status, "message": message, "question": question,
+def _no_verdict(status: str, detail: str, parse: dict, question, description) -> dict:
+    return {"status": status, "message": OFFLINE_MESSAGE, "detail": detail, "question": question,
             "description": description, "parse": parse, "parse_source": None,
             "requirements": None, "checks": None, "verdict": None, "driving_checks": None,
             "explanation": None, "notes": []}
@@ -69,10 +73,10 @@ def assess(df: pd.DataFrame, question: str, description: str | None = None,
     if parse["status"] in {"setup_required", "api_unavailable"}:
         case = match_demo_case(df, question)
         if case is None:
-            msg = (SETUP_MESSAGE if parse["status"] == "setup_required"
-                   else f"Claude API unavailable ({parse['error']}). Check network, key and "
-                        "credits, then re-run.")
-            return _no_verdict(parse["status"], msg, parse, question, description)
+            detail = (SETUP_DETAIL if parse["status"] == "setup_required"
+                      else f"Claude API unavailable ({parse['error']}). Check network, key "
+                           "and credits, then re-run.")
+            return _no_verdict(parse["status"], detail, parse, question, description)
         parse = {**parse, "requirements": copy.deepcopy(case["requirements"])}
         parse_source = CACHED_LABEL
         notes.append(f"Using {CACHED_LABEL}: the hand-written requirements for demo case "
@@ -89,7 +93,7 @@ def assess(df: pd.DataFrame, question: str, description: str | None = None,
         checks = [C.check_question_parsed(parse["error"]), C.check_identifiers(df)]
     verdict = assign_verdict(checks)
     explanation = explain(question, req, checks, verdict, client=client, model=model)
-    return {"status": "ok", "message": None, "question": question, "description": description,
+    return {"status": "ok", "message": None, "detail": None, "question": question, "description": description,
             "parse": parse, "parse_source": parse_source, "requirements": req,
             "checks": checks, "verdict": verdict["verdict"],
             "driving_checks": verdict["driving_checks"], "explanation": explanation,

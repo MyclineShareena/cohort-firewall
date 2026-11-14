@@ -90,8 +90,10 @@ Any hard fail -> Blocked; else any unknown -> Insufficient Evidence;
 else any soft fail -> Conditional; else Ready. Return verdict plus the
 checks that drove it.
 A verdict only ever describes the data. Missing API setup returns status
-"setup_required" ("Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL"), and an
-unreachable API returns "api_unavailable"; neither has a verdict.
+"setup_required", and an unreachable API returns "api_unavailable"; neither
+has a verdict. The UI message for both is "Reading a new question needs live
+Claude. The six demo questions work offline."; technical detail (env var
+names, API error) lives only in the result's "detail" field and the README.
 Offline demo mode: if the API is unavailable and file content + question
 exactly match a demo case, use its hand-written requirements, labeled
 "cached parse (offline)". Never for non-demo inputs.

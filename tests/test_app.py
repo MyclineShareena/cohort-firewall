@@ -55,8 +55,11 @@ def test_edited_question_offline_is_setup_required(offline):
     at.text_area(key="question").input("Does albumin predict 12-month death?").run()
     at.button[0].click().run()
     assert not at.exception
-    assert any("Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL" in w.value for w in at.warning)
+    assert [w.value for w in at.warning] == [
+        "Reading a new question needs live Claude. The six demo questions work offline."]
     assert "VERDICT" not in html_text(at)  # no verdict card
+    assert "ANTHROPIC" not in _all_text(at) and ".env" not in _all_text(at)
+    assert at.session_state.result["detail"] == "Set ANTHROPIC_API_KEY and ANTHROPIC_MODEL"
 
 
 def test_not_applicable_shown_gray_not_passed(offline):
