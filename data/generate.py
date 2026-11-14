@@ -138,12 +138,20 @@ def build_all() -> dict[str, pd.DataFrame]:
     # n=1000, 100 events, 0 early censoring -> EPV 10 (P=10) passes; Riley (i) needs ~1,200.
     epv_vs_riley = make_cohort(n=1000, events_24m=100, censored_early=0, seed=SEED + 2)
 
+    # clean + a fake SSN-like column, for the identifier_columns check (Milestone 5 scenarios).
+    identifiers = clean.copy()
+    rng = np.random.default_rng(SEED + 3)
+    identifiers["ssn"] = [f"{a:03d}-{b:02d}-{c:04d}" for a, b, c in zip(
+        rng.integers(100, 999, len(identifiers)), rng.integers(10, 99, len(identifiers)),
+        rng.integers(1000, 9999, len(identifiers)))]
+
     return {"clean": clean, "messy": messy, "broken": broken,
-            "leakage": leakage, "epv_vs_riley": epv_vs_riley}
+            "leakage": leakage, "epv_vs_riley": epv_vs_riley, "identifiers": identifiers}
 
 
 EXPECTED = {"clean": "Ready", "messy": "Conditional", "broken": "Blocked",
-            "leakage": "Blocked", "epv_vs_riley": "Conditional (EPV passes, Riley fails)"}
+            "leakage": "Blocked", "epv_vs_riley": "Conditional (EPV passes, Riley fails)",
+            "identifiers": "Blocked (identifier_columns)"}
 
 
 def main() -> None:
