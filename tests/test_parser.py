@@ -223,3 +223,19 @@ def test_vital_status_outcome_allowed_when_column_missing(files):
     # broken.csv lacks vital_status: the parse must succeed so the checks can Block it.
     prof = P.profile_dataset(files["broken"])
     assert P.validate_parsed(good_output(), prof, DESCRIPTION) == []
+
+
+def test_load_env_fills_empty_but_keeps_set_values(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("ANTHROPIC_MODEL=from-dotenv\nANTHROPIC_API_KEY=dotenv-key\n")
+    monkeypatch.setattr(P, "ROOT", tmp_path)
+    monkeypatch.setenv("ANTHROPIC_MODEL", "")            # empty -> filled from .env
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "shell-key")  # set -> kept
+    P.load_env()
+    import os
+    assert os.environ["ANTHROPIC_MODEL"] == "from-dotenv"
+    assert os.environ["ANTHROPIC_API_KEY"] == "shell-key"
+
+
+def test_load_env_without_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(P, "ROOT", tmp_path)
+    P.load_env()  # no .env: no error

@@ -13,7 +13,7 @@ from typing import Literal, Optional, Union
 import anthropic
 import pandas as pd
 import pydantic
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict
 
 import prompts
@@ -29,8 +29,12 @@ class ConfigError(RuntimeError):
 
 
 def load_env() -> None:
-    """Load .env from the project root; existing environment variables win."""
-    load_dotenv(ROOT / ".env", override=False)
+    """Load .env from the project root. Called before every API use, so a key added
+    to .env while the app is running takes effect on the next run. Non-empty
+    environment variables win over .env; empty ones are filled from .env."""
+    for key, value in dotenv_values(ROOT / ".env").items():
+        if value and not os.environ.get(key):
+            os.environ[key] = value
 
 
 def get_model() -> str:

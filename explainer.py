@@ -100,9 +100,8 @@ def fallback_explanation(checks: list[dict], verdict: dict, reason: str) -> dict
     """Deterministic explanation from the checks' own messages."""
     driving = {c["name"] for c in verdict["driving_checks"]}
     return {
-        "summary": (f"Verdict: {verdict['verdict']}, assigned by the rules engine. Claude's "
-                    f"explanation is unavailable ({reason}), so the checks' own messages "
-                    "are shown."),
+        "summary": (f"Verdict: {verdict['verdict']}, assigned by the rules engine. The "
+                    "findings below are the checks' own messages."),
         "driving_checks": [{"name": c["name"], "explanation": c["message"]}
                            for c in checks if c["name"] in driving],
         "not_applicable": [{"name": c["name"], "reason": c["message"]}

@@ -48,9 +48,9 @@ DEMO_CASES = [
      "requirements": _req(FIELDS_11, 11, from_description=LUNG),
      "verdict": "Blocked", "driving": {"label_leakage"}},
     {"name": "epv_vs_riley", "file": "epv_vs_riley.csv", "description": DESCRIPTION,
-     "question": ("Predict death within 24 months of diagnosis using age, sex, stage, "
-                  "ECOG, histology and albumin."),
-     "requirements": _req(FIELDS_10, 10),
+     "question": ("Predict death within 24 months of diagnosis in lung cancer patients "
+                  "using age, sex, stage, ECOG, histology and albumin."),
+     "requirements": _req(FIELDS_10, 10, from_description=LUNG),
      "verdict": "Conditional", "driving": {"sample_size"}},
     {"name": "pdl1_unmappable", "file": "clean.csv", "description": DESCRIPTION,
      "question": ("Predict death within 24 months using age, sex, stage, ECOG, histology, "
